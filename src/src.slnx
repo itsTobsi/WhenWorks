@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Scheduling.Core/Scheduling.Core.csproj" />
+  <Project Path="WhenWorks/WhenWorks.csproj" />
+</Solution>
