@@ -1,4 +1,4 @@
 <Solution>
-  <Project Path="Scheduling.Core/Scheduling.Core.csproj" />
+  <Project Path="WhenWorks.Core/WhenWorks.Core.csproj" Id="066367fb-add6-4b2d-879d-f94def400471" />
   <Project Path="WhenWorks/WhenWorks.csproj" />
 </Solution>
