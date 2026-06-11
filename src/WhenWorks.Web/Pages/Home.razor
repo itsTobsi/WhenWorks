@@ -1,0 +1,279 @@
+﻿@page "/"
+@using System.Text.Json
+@using WhenWorks.Core
+@using WhenWorks.Web.Models
+@using static WhenWorks.Core.WhenWorks
+@inject IJSRuntime JS
+
+<PageTitle>WhenWorks</PageTitle>
+
+<div class="container-fluid py-2">
+
+    @* Top bar *@
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="">WhenWorks</h3>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" @onclick="Save">Save File</button>
+            <label class="btn btn-outline-secondary btn-sm">
+                Load File<InputFile OnChange="OnLoad" accept=".json" hidden />
+            </label>
+            <label class="btn btn-outline-secondary btn-sm">
+                Import File <InputFile OnChange="OnImport" accept=".json" hidden />
+            </label>
+        </div>
+    </div>
+
+    <div class="row g-2">
+
+        @* People card *@
+        <div class="col-12 col-md-4">
+            <div class="card">
+                <div class="card-header fw-bold">People</div>
+                <div class="card-body">
+                    <div class="input-group input-group-sm">
+                        <input class="form-control" placeholder="Name" @bind="newPersonName" @bind:event="oninput" @onkeydown="@(e => { if (e.Key == "Enter") AddPerson(); })" />
+                        <button class="btn btn-primary" @onclick="AddPerson">Add</button>
+                    </div>
+                    <div class="list-group mt-2">
+                        @foreach (var p in people)
+                        {
+                            <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center @(p == selectedPerson ? "active" : "")" @onclick="() => selectedPerson = p">
+                                <span>@p.Name <span class="badge bg-secondary">@p.Slots.Count</span></span>
+                                <span class="btn-close" @onclick:stopPropagation="true" @onclick="() => RemovePerson(p)"></span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Time card *@
+        <div class="col-12 col-md-8">
+            <div class="card mb-2">
+                <div class="card-header fw-bold">Availability for @(selectedPerson?.Name ?? "—")</div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-auto">
+                            <label class="form-label small">Start</label>
+                            <input type="datetime-local" class="form-control form-control-sm" @bind="startAt" />
+                        </div>
+                        <div class="col-auto">
+                            <label class="form-label small">End</label>
+                            <input type="datetime-local" class="form-control form-control-sm" @bind="endAt" />
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-primary btn-sm" @onclick="AddSlot" disabled="@(selectedPerson is null)">Add slot</button>
+                        </div>
+                    </div>
+                    <ul class="list-group mt-4">
+                        @if (selectedPerson is not null)
+                        {
+                            @foreach (var s in selectedPerson.Slots)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                                    @s.ToString()
+                                    <span class="btn-close" @onclick="() => selectedPerson.Slots.Remove(s)"></span>
+                                </li>
+                            }
+                        }
+                    </ul>
+                </div>
+            </div>
+
+            @* Find time card *@
+            <div class="card">
+                <div class="card-header fw-bold d-flex align-items-center gap-2 flex-wrap">
+                    <button class="btn btn-success btn-sm" @onclick="FindCommonTimes">Find common times</button>
+                    <span class="small">at least</span>
+                    <input type="number" class="form-control form-control-sm" style="width:4.5rem" min="1" max="@Math.Max(1, people.Count)" @bind="requiredCount" />
+                    <span class="small">people</span>
+                </div>
+                <div class="card-body">
+                    @if (res.Count == 0)
+                    {
+                        <p class="text-muted small">No results yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @foreach (var s in res)
+                            {
+                                <li class="list-group-item py-1">@s.ToString()</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(status))
+            {
+                <div class="text-muted small mt-2">@status</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private class PersonModel
+    {
+        public string Name { get; set; } = "";
+        public List<Slot> Slots { get; } = new();
+    }
+
+    // People and data
+    private readonly List<PersonModel> people = new();
+    private readonly List<CommonWindow> res = new();
+    private PersonModel? selectedPerson;
+
+    private string newPersonName = "";
+    private DateTime? startAt;
+    private DateTime? endAt;
+
+    private int requiredCount = 1;
+    private string status = "";
+
+    private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true }; // Easier to read
+
+    protected override void OnInitialized()
+    {
+        selectedPerson = people.FirstOrDefault();
+        requiredCount = people.Count;
+    }
+
+    // Methods for actions on the site
+    private void AddPerson()
+    {
+        var name = newPersonName.Trim();
+        if (name.Length == 0)
+        {
+            return;
+        }
+
+        var p = new PersonModel { Name = name };
+
+        people.Add(p);
+        selectedPerson = p;
+        newPersonName = "";
+        requiredCount = people.Count;
+    }
+
+    private void RemovePerson(PersonModel p)
+    {
+        people.Remove(p);
+
+        if (selectedPerson == p)
+        {
+            selectedPerson = people.FirstOrDefault();
+        }
+
+        if (requiredCount > people.Count)
+        {
+            requiredCount = Math.Max(1, people.Count);
+        }
+    }
+
+    private void AddSlot()
+    {
+        if (selectedPerson == null) 
+        {
+            status = "Pick a person first."; 
+            return;
+        }
+
+        if (startAt == null || endAt == null)
+        {
+            status = "Fill in both start and end."; 
+            return; 
+        }
+
+        var slot = new Slot(new DateTimeOffset(startAt.Value), new DateTimeOffset(endAt.Value));
+        if (!slot.IsValid)
+        {
+            status = "End must be after start.";
+            return;
+        }
+
+        // Could remove this, I just don't know why someone would want to add a slot that goes over multiple days. 
+        if (slot.Start.Date != slot.End.Date)
+        {
+            status = "Keep a slot within one day.";
+            return;
+        }
+
+        selectedPerson.Slots.Add(slot);
+        status = $"Added a slot for {selectedPerson.Name}.";
+    }
+
+    private void FindCommonTimes()
+    {
+        // TODO: Find a better solution than this
+        var ppl = people.Select(p => new Person(p.Name, p.Slots.ToList())).ToList();
+        var count = Math.Clamp(requiredCount, 1, Math.Max(1, ppl.Count));
+
+        res.Clear();
+        res.AddRange(WhenWorks.FindCommonWindow(count, ppl));
+        status = res.Count == 0 ? "No common availability found." : $"Found {res.Count} window(s) for at least {count} people.";
+    }
+
+    // Save/load/import files
+    private SaveFile ToSaveFile() => new(people.Select(p => new PersonDto(p.Name, p.Slots.Select(s => new SlotDto(s.Start, s.End)).ToList())).ToList());
+
+    private async Task Save()
+    {
+        var json = JsonSerializer.Serialize(ToSaveFile(), JsonOpts);
+        await JS.InvokeVoidAsync("downloadFile", $"{DateTime.Now:g}_availability.json", json);
+    }
+
+    private async Task OnLoad(InputFileChangeEventArgs e)
+    {
+        var data = await ReadFile(e);
+        if (data is null)
+        {
+            return;
+        }
+
+        people.Clear();
+        AppendFrom(data);
+        selectedPerson = people.FirstOrDefault();
+        requiredCount = Math.Max(1, people.Count);
+        res.Clear();
+        status = $"Loaded {people.Count} people.";
+    }
+
+    private async Task OnImport(InputFileChangeEventArgs e)
+    {
+        var data = await ReadFile(e);
+        if (data is null)
+        {
+            return;
+        }
+
+        var before = people.Count;
+
+        AppendFrom(data);
+        requiredCount = Math.Max(1, people.Count);
+        status = $"Imported {people.Count - before} people.";
+    }
+
+    private static async Task<SaveFile?> ReadFile(InputFileChangeEventArgs e)
+    {
+        await using var stream = e.File.OpenReadStream(maxAllowedSize: 1024 * 1024);
+        return await JsonSerializer.DeserializeAsync<SaveFile>(stream, JsonOpts);
+    }
+
+    private void AppendFrom(SaveFile data)
+    {
+        foreach (var person in data.People)
+        {
+            var pm = new PersonModel { Name = person.Name };
+
+            foreach (var slot in person.Slots)
+            {
+                pm.Slots.Add(new Slot(slot.Start, slot.End));
+            }
+
+            people.Add(pm);
+        }
+    }
+}

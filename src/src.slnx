@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="WhenWorks.Core/WhenWorks.Core.csproj" Id="066367fb-add6-4b2d-879d-f94def400471" />
+  <Project Path="WhenWorks.Web/WhenWorks.Web.csproj" Id="c6b02f10-10cb-4f7e-99f8-0329d4bad84b" />
   <Project Path="WhenWorks/WhenWorks.csproj" />
 </Solution>

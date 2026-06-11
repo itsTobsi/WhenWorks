@@ -109,7 +109,7 @@ namespace WhenWorks.ViewModels
             var end = new DateTimeOffset(EndDate.Value.Date + EndTime.Value, EndDate.Value.Offset);
 
             var slot = new Slot(start, end);
-            if (!slot.isValid)
+            if (!slot.IsValid)
             {
                 Status = "Invalid slot: End must be after start";
                 return;

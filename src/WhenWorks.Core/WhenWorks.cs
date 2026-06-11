@@ -10,7 +10,7 @@ namespace WhenWorks.Core
         // Merges overlapping slots into a list of non-overlapping slots
         public static List<Slot> Merge(IEnumerable<Slot> slots)
         {
-            var sortedSlots = slots.Where(s => s.isValid).OrderBy(s => s.Start).ToList();
+            var sortedSlots = slots.Where(s => s.IsValid).OrderBy(s => s.Start).ToList();
             var mergedSlots = new List<Slot>();
 
             foreach (var slot in sortedSlots)
@@ -55,6 +55,70 @@ namespace WhenWorks.Core
                 else if (before && !after && open < time)
                 {
                     res.Add(new Slot(open, time));
+                }
+            }
+
+            return res;
+        }
+
+        public record CommonWindow(DateTimeOffset Start, DateTimeOffset End, IReadOnlyList<string> People)
+        {
+            public override string ToString() => $"{Start:ddd dd MMM HH:mm} – {End:HH:mm}  ({string.Join(", ", People)})";
+        }
+
+        // TODO: Windows app needs to use this, I'll fix it after the Blazor project is done.
+        public static List<CommonWindow> FindCommonWindow(int count, IEnumerable<Person> people)
+        {
+            var events = people.SelectMany(p => Merge(p.Availability).Select(s => (p.Name, slot: s)))
+                .SelectMany(s => new[]
+                {
+                    (time: s.slot.Start, delta: +1, person: s.Name),
+                    (time: s.slot.End, delta: -1, person: s.Name)
+                })
+                .OrderBy(e => e.time)
+                .ToList();
+
+            var res = new List<CommonWindow>();
+            var active = new HashSet<string>();
+
+            int i = 0;
+            DateTimeOffset SegmentStart = default;
+            List<string>? SegmentPeople = null;
+
+            while (i < events.Count)
+            {
+                var time = events[i].time;
+
+                // Close previous window 
+                if (SegmentPeople != null && SegmentStart < time)
+                {
+                    res.Add(new CommonWindow(SegmentStart, time, SegmentPeople));
+                }
+
+                // Apply all events at the current time (so set is updated before we check if we can open a new window)
+                while (i < events.Count && events[i].time == time)
+                {
+                    if (events[i].delta == +1)
+                    {
+                        active.Add(events[i].person);
+                    }
+                    else
+                    {
+                        active.Remove(events[i].person);
+                    }
+
+                    i++;
+                }
+
+                // New window from time if enough people are available
+                if (active.Count >= count)
+                {
+                    SegmentStart = time;
+                    SegmentPeople = active.ToList();
+                }
+                else
+                {
+                    SegmentPeople = null;
                 }
             }
 
